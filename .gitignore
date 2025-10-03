@@ -1,0 +1,19 @@
+# LuaRocks / project-local environment
+.luarocks/
+lua_modules/
+luarocks
+lua
+
+# IDE/editor configs
+.vscode/
+
+# LOVE2D build artifacts (if you package it that way)
+*.love
+
+# OS cruft
+.DS_Store
+Thumbs.db
+/luarocks
+/lua
+/lua_modules
+/.luarocks
