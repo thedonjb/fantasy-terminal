@@ -15,7 +15,7 @@ function love.load()
     state.font = love.graphics.newFont("src/assets/jbmono.ttf", 14)
     love.graphics.setFont(state.font)
 
-    state.fsroot = "ltermfs/"
+    state.fsroot = "ftermfs/"
     state.wd = state.fsroot
 
     local dirs = {
