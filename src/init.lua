@@ -16,19 +16,39 @@ function love.load()
     love.graphics.setFont(state.font)
 
     state.fsroot = "ftermfs/"
-    state.wd = state.fsroot
 
+    -- Required directories
     local dirs = {
         state.fsroot,
         state.fsroot .. "home",
         state.fsroot .. "tmp",
         state.fsroot .. "appnet",
     }
-
     for _, dir in ipairs(dirs) do
         if not love.filesystem.getInfo(dir) then
             love.filesystem.createDirectory(dir)
         end
+    end
+
+    local homeRoot = state.fsroot .. "home"
+    local rootHome = homeRoot .. "/root"
+    local guestHome = homeRoot .. "/guest"
+
+    if not love.filesystem.getInfo(rootHome) then
+        love.filesystem.createDirectory(rootHome)
+    end
+    if not love.filesystem.getInfo(guestHome) then
+        love.filesystem.createDirectory(guestHome)
+    end
+
+    state.users.root   = state.users.root or { password = "changeme" }
+    state.users.guest  = state.users.guest or { password = nil }
+
+    state.current_user = "root"
+    state.home         = rootHome .. "/"
+    state.wd           = state.home
+    if not state.histories[state.current_user] then
+        state.histories[state.current_user] = { index = 0 }
     end
 
     history.load()
@@ -36,10 +56,9 @@ function love.load()
     if commands._helpers and commands._helpers.register_appnet_apps then
         commands._helpers.register_appnet_apps(commands)
     end
-
     terminal.processcommand("apm rescan")
 
-    local rc_path = state.fsroot .. "home/.ltrc"
+    local rc_path = state.home .. ".ltrc"
     if love.filesystem.getInfo(rc_path) then
         local ok, err = pcall(function()
             local f = love.filesystem.newFile(rc_path)
@@ -50,7 +69,7 @@ function love.load()
             if contents and #contents > 0 then
                 for line in contents:gmatch("[^\r\n]+") do
                     if line:match("%S") then
-                        table.insert(state.term, { prompt = state.wd .. "$ ", text = line })
+                        table.insert(state.term, { prompt = state.current_user .. "@" .. state.wd .. "$ ", text = line })
                         terminal.processcommand(line)
                     end
                 end

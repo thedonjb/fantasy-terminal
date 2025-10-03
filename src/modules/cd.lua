@@ -10,7 +10,7 @@ return {
         local pathArg = args[2]
 
         if not pathArg or pathArg == "~" then
-            state.wd = state.fsroot .. "home/"
+            state.wd = state.home
             return
         end
 

@@ -128,7 +128,7 @@ apm rescan
 
 ## `.ltrc` Startup File
 
-You can create a file at `ltermfs/home/.ltrc` to auto-run commands at startup, e.g.:
+You can create a file at `ftermfs/home/.ltrc` to auto-run commands at startup, e.g.:
 
 ```
 apm rescan

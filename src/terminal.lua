@@ -7,6 +7,15 @@ local history       = require "src.history"
 local terminal      = {}
 state.scroll_offset = 0
 
+local function getPrompt()
+    local wd = state.wd
+    if state.home and wd:sub(1, #state.home) == state.home then
+        wd = "~" .. wd:sub(#state.home + 1)
+        if wd == "~" then wd = "~" end
+    end
+    return state.current_user .. "@" .. wd .. "$ "
+end
+
 ------------------------------------------------------------
 -- Cursor Handling
 ------------------------------------------------------------
@@ -26,12 +35,22 @@ local function clampCursor()
 end
 
 ------------------------------------------------------------
--- Variable Expansion
+-- Variable Expansion (+ ~ expansion for home)
 ------------------------------------------------------------
 local function expand_vars(str)
-    return str:gsub("%$(%w+)", function(var)
+    -- expand ~ to current user's home
+    if state.home then
+        str = str:gsub("(^|[%s])~", function(prefix)
+            return prefix .. state.home
+        end)
+    end
+
+    -- replace $VARS
+    str = str:gsub("%$(%w+)", function(var)
         return state.vars[var] or ""
     end)
+
+    return str
 end
 
 ------------------------------------------------------------
@@ -70,22 +89,48 @@ local function expand_globs(args)
 end
 
 ------------------------------------------------------------
--- Command Processing (with var + glob expansion)
+-- Command Processing
 ------------------------------------------------------------
 function terminal.processcommand(input)
     for sub in input:gmatch("[^;]+") do
         local args = utils.split(expand_vars(sub), " ")
         args = expand_globs(args)
 
-        local cmd = commands[args[1]]
-        if cmd then
-            cmd.exec(args, state, commands)
+        local cmdname = args[1]
+        if not cmdname or cmdname == "" then
+            utils.printt(state, "invalid command: ")
         else
-            local appname = args[1]
-            if appname and appname ~= "" then
-                utils.printt(state, "invalid command: " .. appname)
+            local executed = false
+
+            local cmd = commands[cmdname]
+            if cmd then
+                cmd.exec(args, state, commands)
+                executed = true
             else
-                utils.printt(state, "invalid command: ")
+                for dir in state.vars.PATH:gmatch("[^:]+") do
+                    local candidate = dir .. "/" .. cmdname .. ".lua"
+                    if love.filesystem.getInfo(candidate, "file") then
+                        local chunk, err = love.filesystem.load(candidate)
+                        if not chunk then
+                            utils.printt(state, "exec: error loading " .. candidate .. ": " .. tostring(err))
+                        else
+                            local ok, res = pcall(chunk)
+                            if not ok then
+                                utils.printt(state, "exec: error running " .. candidate .. ": " .. tostring(res))
+                            elseif type(res) == "table" and res.exec then
+                                res.exec(args, state, commands)
+                            else
+                                utils.printt(state, "exec: " .. candidate .. " is not a valid command module")
+                            end
+                        end
+                        executed = true
+                        break
+                    end
+                end
+            end
+
+            if not executed then
+                utils.printt(state, "invalid command: " .. cmdname)
             end
         end
     end
@@ -98,20 +143,45 @@ function terminal.keypressed(key)
     if key == "escape" then love.event.quit() end
     if state.interm then
         if key == "return" then
+            -- 🔒 Password entry mode
+            if state.auth.mode == "password" then
+                local password = state.auth.buffer
+                local cb = state.auth.callback
+                state.auth.buffer = ""
+                state.auth.mode = nil
+                state.auth.callback = nil
+
+                if cb then cb(password) end
+                return
+            end
+
+            -- 🔤 Multi-line mode (Shift+Enter)
             if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
                 table.insert(state.command_lines, "")
             else
                 local full_command = table.concat(state.command_lines, " ")
-                table.insert(state.term, { prompt = state.wd .. "$ ", text = full_command })
-                table.insert(state.history, 1, full_command)
+
+                -- echo into terminal
+                table.insert(state.term, { prompt = getPrompt(), text = full_command })
+
+                -- save into user history
+                local h = state.histories[state.current_user]
+                h.cmds = h.cmds or {} -- ensure cmds table exists
+                table.insert(h.cmds, 1, full_command)
+                h.index = 0
+
+                -- persist history (needs updated history.lua for per-user!)
                 history.save()
+
+                -- run the command
                 terminal.processcommand(full_command)
-                state.history.index = 0
+
+                -- reset input line
                 state.command_lines = { "" }
                 state.cursor.line = 1
                 state.cursor.col = 0
 
-                -- 🔥 force scroll to bottom
+                -- force scroll
                 state.auto_scroll = true
             end
         elseif key == "backspace" then
@@ -131,30 +201,28 @@ function terminal.keypressed(key)
             clampCursor()
             state.auto_scroll = true
         elseif key == "up" then
-            if #state.history > 0 then
-                if state.history.index < #state.history then
-                    state.history.index = state.history.index + 1
-                    local hist = state.history[state.history.index]
-                    state.command_lines = { hist or "" }
-                    state.cursor.line = 1
-                    state.cursor.col = #state.command_lines[1]
-                end
+            local h = state.histories[state.current_user]
+            h.cmds = h.cmds or {}
+            if #h.cmds > 0 and h.index < #h.cmds then
+                h.index = h.index + 1
+                local hist = h.cmds[h.index]
+                state.command_lines = { hist or "" }
+                state.cursor.line = 1
+                state.cursor.col = #state.command_lines[1]
             end
         elseif key == "down" then
-            if #state.history > 0 then
-                if state.history.index > 1 then
-                    state.history.index = state.history.index - 1
-                    local hist = state.history[state.history.index]
-                    state.command_lines = { hist or "" }
-                    state.cursor.line = 1
-                    state.cursor.col = #state.command_lines[1]
-                elseif state.history.index == 1 then
-                    -- reset to fresh blank line
-                    state.history.index = 0
+            local h = state.histories[state.current_user]
+            h.cmds = h.cmds or {}
+            if #h.cmds > 0 and h.index < #h.cmds then
+                if h.index > 1 then
+                    h.index = h.index - 1
+                    state.command_lines = { h.cmds[h.index] or "" }
+                elseif h.index == 1 then
+                    h.index = 0
                     state.command_lines = { "" }
-                    state.cursor.line = 1
-                    state.cursor.col = 0
                 end
+                state.cursor.line = 1
+                state.cursor.col = #state.command_lines[1]
             end
         elseif key == "v" and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl")) then
             local clip = love.system.getClipboardText()
@@ -223,6 +291,13 @@ function terminal.keypressed(key)
 end
 
 function terminal.textinput(text)
+    if state.auth.mode == "password" then
+        if #text == 1 then
+            state.auth.buffer = state.auth.buffer .. text
+        end
+        return
+    end
+
     if not state.interm then
         editor.textinput(text)
     else
@@ -260,18 +335,21 @@ function terminal.draw()
         local screenHeight = love.graphics.getHeight()
         local content = {}
 
-        -- 1. Add history
         for _, line in ipairs(state.term) do
             table.insert(content, line)
         end
 
-        -- 2. Add current command lines
-        table.insert(content, { prompt = state.wd .. "$ ", text = state.command_lines[1] or "" })
-        for i = 2, #state.command_lines do
-            table.insert(content, { prompt = "", text = state.command_lines[i] })
+        -- 🔒 If in password mode, show "Password: ****"
+        if state.auth.mode == "password" then
+            local mask = string.rep("*", #state.auth.buffer)
+            table.insert(content, { prompt = "Password: ", text = mask })
+        else
+            table.insert(content, { prompt = getPrompt(), text = state.command_lines[1] or "" })
+            for i = 2, #state.command_lines do
+                table.insert(content, { prompt = "", text = state.command_lines[i] })
+            end
         end
 
-        -- 3. Scroll math
         local totalHeight = #content * lineHeight
         local maxScroll   = math.max(0, totalHeight - (screenHeight - 2 * paddingY))
 
@@ -295,7 +373,7 @@ function terminal.draw()
         -- 5. Draw cursor
         local cursor_line_index = state.cursor.line
         local cursor_y = paddingY + (#state.term + cursor_line_index - 1) * lineHeight - state.scroll_offset
-        local promptWidth = (cursor_line_index == 1) and state.font:getWidth(state.wd .. "$ ") or 0
+        local promptWidth = (cursor_line_index == 1) and state.font:getWidth(getPrompt()) or 0
         local cursor_text = state.command_lines[cursor_line_index]:sub(1, state.cursor.col)
         local cursor_x = paddingX + promptWidth + state.font:getWidth(cursor_text)
         love.graphics.print(state.tinc, cursor_x, cursor_y)

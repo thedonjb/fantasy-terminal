@@ -9,13 +9,45 @@ function utils.split(inputstr, sep)
     return t
 end
 
+function utils.clone(tbl)
+    if type(tbl) ~= "table" then return tbl end
+    local copy = {}
+    for k, v in pairs(tbl) do
+        copy[k] = utils.clone(v)
+    end
+    return copy
+end
+
 function utils.printt(state, text)
     for _, line in ipairs(utils.split(text, "\n")) do
         table.insert(state.term, line)
     end
 end
 
--- utils.lua
+function utils.switch_user(state, user, home)
+    -- ensure terminal buffer always exists
+    state.term          = state.term or {}
+
+    state.current_user  = user
+    state.home          = home or (state.fsroot .. "home/" .. user .. "/")
+    state.wd            = state.home
+
+    -- force env/history creation
+    local _             = state.envs[user]
+    local h             = state.histories[user]
+
+    -- reset per-session input
+    state.command_lines = { "" }
+    state.cursor.line   = 1
+    state.cursor.col    = 0
+    h.index             = 0
+
+    -- refresh vars
+    state.vars.USER     = user
+    state.vars.HOME     = state.home
+    state.vars.PWD      = state.wd
+end
+
 function utils.register_command(commands_table, name, path)
     -- full system path using save directory
     local fullpath = love.filesystem.getSaveDirectory() .. "/" .. path
