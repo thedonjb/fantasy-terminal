@@ -35,13 +35,49 @@ local function expand_vars(str)
 end
 
 ------------------------------------------------------------
--- Command Processing
+-- Expand globs (e.g. *.txt, ?.lua)
+------------------------------------------------------------
+local function expand_globs(args)
+    local expanded = {}
+    for _, arg in ipairs(args) do
+        if arg:find("[%*%?]") then
+            -- convert glob to Lua pattern
+            local pattern = "^" .. arg
+                :gsub("%%", "%%%%")
+                :gsub("%.", "%%.")
+                :gsub("%*", ".*")
+                :gsub("%?", ".") .. "$"
+
+            local matches = {}
+            for _, f in ipairs(love.filesystem.getDirectoryItems(state.wd)) do
+                if f:match(pattern) then
+                    table.insert(matches, f)
+                end
+            end
+
+            if #matches > 0 then
+                for _, m in ipairs(matches) do
+                    table.insert(expanded, m)
+                end
+            else
+                table.insert(expanded, arg) -- no match, keep literal
+            end
+        else
+            table.insert(expanded, arg)
+        end
+    end
+    return expanded
+end
+
+------------------------------------------------------------
+-- Command Processing (with var + glob expansion)
 ------------------------------------------------------------
 function terminal.processcommand(input)
     for sub in input:gmatch("[^;]+") do
         local args = utils.split(expand_vars(sub), " ")
-        local cmd = commands[args[1]]
+        args = expand_globs(args)
 
+        local cmd = commands[args[1]]
         if cmd then
             cmd.exec(args, state, commands)
         else

@@ -220,7 +220,6 @@ function editor.draw()
     love.graphics.setColor(1, 1, 1)
     love.graphics.rectangle("fill", cx, cy, 2, lineHeight)
 
-    -- Status bar
     love.graphics.setColor(0, 0, 0.5)
     love.graphics.rectangle("fill", 0, winH - (helpbarHeight + statusHeight) * lineHeight, love.graphics.getWidth(),
         statusHeight * lineHeight)
@@ -228,7 +227,6 @@ function editor.draw()
     love.graphics.print("File: " .. editor.filename .. (editor.dirty and " (modified)" or ""), margin,
         winH - (helpbarHeight + statusHeight) * lineHeight)
 
-    -- Help bar
     local help1 = "^G Help  ^O Save  ^X Exit  ^K Cut  ^U Paste  ^W Find  ^_ Goto  ^C Pos"
     love.graphics.setColor(0, 0.5, 0)
     love.graphics.rectangle("fill", 0, winH - helpbarHeight * lineHeight, love.graphics.getWidth(),
@@ -236,14 +234,12 @@ function editor.draw()
     love.graphics.setColor(1, 1, 1)
     love.graphics.print(help1, margin, winH - (helpbarHeight - 1) * lineHeight)
 
-    -- Message
     if editor.message ~= "" and (love.timer.getTime() - editor.messageTime < 3) then
         love.graphics.setColor(1, 1, 0)
         love.graphics.print(editor.message, love.graphics.getWidth() / 2 - font:getWidth(editor.message) / 2,
             winH - (helpbarHeight + statusHeight) * lineHeight)
     end
 
-    -- Prompt
     if editor.mode == "prompt" then
         love.graphics.setColor(0.3, 0.3, 0.3)
         love.graphics.rectangle("fill", 0, winH - lineHeight, love.graphics.getWidth(), lineHeight)
@@ -251,6 +247,8 @@ function editor.draw()
         local label = editor.prompt.type == "goto" and "Goto line: " or "Search: "
         love.graphics.print(label .. editor.prompt.text, margin, winH - lineHeight)
     end
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return editor

@@ -1,9 +1,10 @@
 local lfs = love.filesystem
 local utils = require("src.utils")
+local state = require("src.state")
 
+-- Check if path is inside critical system dirs
 local function is_critical_path(path, fsroot)
     path = path:gsub("/+", "/")
-
     local critical = {
         fsroot,
         fsroot .. "home",
@@ -20,6 +21,7 @@ local function is_critical_path(path, fsroot)
     return false
 end
 
+-- Recursive removal logic
 local function rm_path(path, opts, state)
     local info = lfs.getInfo(path)
     if not info then
@@ -29,7 +31,7 @@ local function rm_path(path, opts, state)
         return
     end
 
-    if is_critical_path(path) and not opts.force_critical then
+    if is_critical_path(path, state.fsroot) and not opts.force_critical then
         utils.printt(state, "rm: refusing to remove protected path: " .. path)
         utils.printt(state, "use --force-critical and type 'Y' to confirm")
 
@@ -82,7 +84,6 @@ return {
         local opts = {}
         local paths = {}
 
-        -- parse flags and paths
         for i = 2, #args do
             local arg = args[i]
             if arg:sub(1, 1) == "-" then
