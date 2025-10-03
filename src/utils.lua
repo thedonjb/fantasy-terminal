@@ -49,7 +49,6 @@ function utils.switch_user(state, user, home)
 end
 
 function utils.register_command(commands_table, name, path)
-    -- full system path using save directory
     local fullpath = love.filesystem.getSaveDirectory() .. "/" .. path
     local f = io.open(fullpath, "r")
     if not f then
@@ -76,6 +75,18 @@ function utils.register_command(commands_table, name, path)
                     clear = function() state.term = {} end,
                     state = state,
                     fs = love.filesystem,
+                    users = {
+                        current = function() return state.current_user end,
+                        get = function(u) return state.users[u] end,
+                        list = function()
+                            local names = {}
+                            for k, _ in pairs(state.users) do
+                                table.insert(names, k)
+                            end
+                            table.sort(names)
+                            return names
+                        end
+                    }
                 },
                 ipairs = ipairs,
                 pairs = pairs,
