@@ -1,6 +1,6 @@
--- 📁 src/app/editor.lua
 -- Essential nano-like in-game editor
 
+local parser = require("src.env.parser")
 local editor = {}
 
 editor.active = false
@@ -16,6 +16,15 @@ editor.dirty = false
 editor.mode = "normal" -- can be "normal" or "prompt"
 editor.prompt = { text = "", type = nil }
 
+editor.showCompletions = false
+editor.completions = {}
+editor.completionIndex = 1
+
+if not parser._built then
+    parser.build()
+    parser._built = true
+end
+
 -- CONFIG
 local margin = 2
 local helpbarHeight = 2
@@ -29,6 +38,8 @@ local function setMessage(msg)
 end
 
 function editor.open(filename)
+    editor.allCompletions = parser.getCompletions("")
+
     editor.active = true
     editor.filename = filename
     editor.lines = {}
@@ -37,16 +48,13 @@ function editor.open(filename)
     editor.dirty = false
     editor.mode = "normal"
 
-    local finfo = love.filesystem.getInfo(filename)
-    if finfo and finfo.type == "file" then
+    if love.filesystem.getInfo(filename) then
         local content = love.filesystem.read(filename)
-        for line in string.gmatch(content, "([^\n]*)\n?") do
+        for line in content:gmatch("([^\n]*)\n?") do
             table.insert(editor.lines, line)
         end
-        setMessage("Read " .. #editor.lines .. " lines")
     else
         editor.lines[1] = ""
-        setMessage("New File")
     end
 end
 
@@ -66,8 +74,99 @@ function editor.exit()
     end
 end
 
+local function deleteChar()
+    local line = editor.lines[editor.cursor.line] or ""
+    if editor.cursor.col > 1 then
+        local idx = editor.cursor.col - 1
+        editor.lines[editor.cursor.line] =
+            line:sub(1, idx - 1) .. line:sub(idx + 1)
+        editor.cursor.col = idx
+    elseif editor.cursor.line > 1 then
+        -- merge with previous line
+        local prev = editor.lines[editor.cursor.line - 1]
+        editor.cursor.col = #prev + 1
+        editor.lines[editor.cursor.line - 1] = prev .. line
+        table.remove(editor.lines, editor.cursor.line)
+        editor.cursor.line = editor.cursor.line - 1
+    end
+    editor.dirty = true
+end
+
 function editor.keypressed(key)
     local ctrl = love.keyboard.isDown("lctrl", "rctrl")
+
+    -- Handle completions navigation
+
+    if editor.showCompletions and #editor.completions > 0 then
+        local line = editor.lines[editor.cursor.line] or ""
+        if key == "down" then
+            editor.completionIndex = editor.completionIndex % #editor.completions + 1
+            return
+        elseif key == "up" then
+            editor.completionIndex = (editor.completionIndex - 2) % #editor.completions + 1
+            return
+        elseif key == "return" or key == "tab" then
+            local choice = editor.completions[editor.completionIndex]
+            if type(choice) == "table" then
+                choice = choice.name
+            end
+
+            local line = editor.lines[editor.cursor.line]
+            local before = line:sub(1, editor.cursor.col - 1)
+            local after = line:sub(editor.cursor.col)
+
+            -- find the current word before the cursor
+            local prefixStart, prefix = before:find("([%w_]+)$")
+            if prefixStart then
+                -- replace prefix with the chosen completion
+                local newBefore = before:sub(1, prefixStart - 1) .. choice
+                editor.lines[editor.cursor.line] = newBefore .. after
+                editor.cursor.col = #newBefore + 1
+            else
+                -- fallback: just insert choice
+                editor.lines[editor.cursor.line] = before .. choice .. after
+                editor.cursor.col = editor.cursor.col + #choice
+            end
+
+            editor.showCompletions = false
+            return
+        elseif key == "escape" then
+            editor.showCompletions = false
+            return
+        elseif key == "backspace" then
+            deleteChar()
+
+            -- 🔑 Re-run completion logic after backspace
+            local before = editor.lines[editor.cursor.line]:sub(1, editor.cursor.col - 1)
+            local word = before:match("([%w_%.]+)$")
+            if word then
+                local prefix, partial = word:match("^(.-)%.([%w_]*)$")
+                if prefix then
+                    editor.completions = parser.getCompletions(prefix .. ".")
+                    if partial ~= "" then
+                        local filtered = {}
+                        for _, c in ipairs(editor.completions) do
+                            if c.name:find("^" .. partial) then
+                                table.insert(filtered, c)
+                            end
+                        end
+                        editor.completions = filtered
+                    end
+                else
+                    editor.completions = {}
+                    for _, c in ipairs(parser.getCompletions("")) do
+                        if c.name:find("^" .. word) then
+                            table.insert(editor.completions, c)
+                        end
+                    end
+                end
+                editor.showCompletions = #editor.completions > 0
+                editor.completionIndex = 1
+            else
+                editor.showCompletions = false
+            end
+        end
+    end
 
     if editor.mode == "prompt" then
         if key == "return" then
@@ -144,18 +243,7 @@ function editor.keypressed(key)
         editor.cursor.col = 1
         editor.dirty = true
     elseif key == "backspace" then
-        if editor.cursor.col > 1 then
-            editor.lines[editor.cursor.line] =
-                line:sub(1, editor.cursor.col - 2) .. line:sub(editor.cursor.col)
-            editor.cursor.col = editor.cursor.col - 1
-        elseif editor.cursor.line > 1 then
-            local prev = editor.lines[editor.cursor.line - 1]
-            editor.cursor.col = #prev + 1
-            editor.lines[editor.cursor.line - 1] = prev .. line
-            table.remove(editor.lines, editor.cursor.line)
-            editor.cursor.line = editor.cursor.line - 1
-        end
-        editor.dirty = true
+        deleteChar()
     elseif key == "left" then
         if editor.cursor.col > 1 then
             editor.cursor.col = editor.cursor.col - 1
@@ -188,11 +276,49 @@ function editor.textinput(text)
         editor.prompt.text = editor.prompt.text .. text
         return
     end
+
     local line = editor.lines[editor.cursor.line]
     editor.lines[editor.cursor.line] =
         line:sub(1, editor.cursor.col - 1) .. text .. line:sub(editor.cursor.col)
     editor.cursor.col = editor.cursor.col + #text
     editor.dirty = true
+
+    local before = editor.lines[editor.cursor.line]:sub(1, editor.cursor.col - 1)
+    local word = before:match("([%w_%.]+)$")
+
+    if word then
+        local prefix, partial = word:match("^(.-)%.([%w_]*)$")
+        if prefix then
+            -- completing object members (e.g. fterm., state., etc.)
+            editor.completions = parser.getCompletions(prefix .. ".")
+            if partial ~= "" then
+                local filtered = {}
+                for _, c in ipairs(editor.completions) do
+                    if c.name:find("^" .. partial) then
+                        table.insert(filtered, c)
+                    end
+                end
+                editor.completions = filtered
+            end
+        else
+            -- completing globals (fterm, state, etc.)
+            editor.completions = {}
+            for _, c in ipairs(parser.getCompletions("")) do
+                if c.name:find("^" .. word) then
+                    table.insert(editor.completions, c)
+                end
+            end
+        end
+
+        if #editor.completions > 0 then
+            editor.showCompletions = true
+            editor.completionIndex = 1
+        else
+            editor.showCompletions = false
+        end
+    else
+        editor.showCompletions = false
+    end
 end
 
 function editor.draw()
@@ -219,6 +345,45 @@ function editor.draw()
     local cy = (editor.cursor.line - first) * lineHeight
     love.graphics.setColor(1, 1, 1)
     love.graphics.rectangle("fill", cx, cy, 2, lineHeight)
+
+    -- IntelliSense popup
+    if editor.showCompletions and #editor.completions > 0 then
+        local popupX = cx + 10
+        local popupY = cy + font:getHeight()
+
+        -- Build label strings from completion objects
+        local labels = {}
+        local maxw = 0
+        for _, c in ipairs(editor.completions) do
+            local label = c.name
+            if c.type then label = label .. " : " .. c.type end
+            if c.desc then label = label .. " — " .. c.desc end
+            table.insert(labels, label)
+            maxw = math.max(maxw, font:getWidth(label))
+        end
+
+        local boxH = math.min(5, #labels) * font:getHeight()
+
+        -- Flip upward if bottom would overflow
+        if popupY + boxH + 4 > winH then
+            popupY = cy - boxH - 4
+        end
+
+        -- Background box
+        love.graphics.setColor(0.2, 0.2, 0.2, 0.9)
+        love.graphics.rectangle("fill", popupX, popupY, maxw + 8, boxH + 4)
+
+        -- Draw completions
+        for i, label in ipairs(labels) do
+            local itemY = popupY + (i - 1) * font:getHeight()
+            if i == editor.completionIndex then
+                love.graphics.setColor(0.4, 0.4, 0.6, 1)
+                love.graphics.rectangle("fill", popupX, itemY, maxw + 8, font:getHeight())
+            end
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print(label, popupX + 4, itemY)
+        end
+    end
 
     love.graphics.setColor(0, 0, 0.5)
     love.graphics.rectangle("fill", 0, winH - (helpbarHeight + statusHeight) * lineHeight, love.graphics.getWidth(),
