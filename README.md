@@ -87,10 +87,10 @@ It automatically rescans installed packages on startup and also supports an `~/.
 
 ### Installing packages
 
-You can install `.lpkg.lua` packages from the terminal:
+You can install `.fpkg.lua` packages from the terminal:
 
 ```bash
-apm install mypackage.lpkg.lua
+apm install mypackage.fpkg.lua
 ```
 
 On **LÖVE 12.x**, a file picker will open if no file is provided.

@@ -78,8 +78,8 @@ local function install_package(file)
         utils.printt(state, "No file selected or provided.")
         return
     end
-    if not file:match("%.lpkg%.lua$") then
-        utils.printt(state, "Invalid format. Only *.lpkg.lua allowed.")
+    if not file:match("%.fpkg%.lua$") then
+        utils.printt(state, "Invalid format. Only *.fpkg.lua allowed.")
         return
     end
 
@@ -89,7 +89,7 @@ local function install_package(file)
         return
     end
 
-    local dest = state.fsroot .. "appnet/" .. meta.name .. ".lpkg.lua"
+    local dest = state.fsroot .. "appnet/" .. meta.name .. ".fpkg.lua"
     fs.write(dest, code) -- now guaranteed `code` is a string
     utils.printt(state, "Installed package: " .. meta.name .. " v" .. meta.version)
 end
@@ -104,7 +104,7 @@ function apm.exec(args, state)
         local pkgs = fs.getDirectoryItems(state.fsroot .. "appnet")
         utils.printt(state, "Installed packages:")
         for _, file in ipairs(pkgs) do
-            if file:match("%.lpkg%.lua$") then
+            if file:match("%.fpkg%.lua$") then
                 utils.printt(state, "- " .. file)
             end
         end
@@ -123,7 +123,7 @@ function apm.exec(args, state)
                         end
                         install_package(paths[1])
                     end,
-                    { { "Lua Package", "*.lpkg.lua" } },
+                    { { "Lua Package", "*.fpkg.lua" } },
                     love.filesystem.getSaveDirectory()
                 )
             else
@@ -133,7 +133,7 @@ function apm.exec(args, state)
                 utils.printt(state,
                     "File picker not available in LÖVE 11.x.\n" ..
                     "Opened appnet folder in your file manager.\n" ..
-                    "Drop your .lpkg.lua files there, then run 'apm rescan'.")
+                    "Drop your .fpkg.lua files there, then run 'apm rescan'.")
             end
         else
             install_package(pkg)
@@ -144,7 +144,7 @@ function apm.exec(args, state)
             utils.printt(state, "Usage: apm remove <name>")
             return
         end
-        local path = state.fsroot .. "appnet/" .. pkgname .. ".lpkg.lua"
+        local path = state.fsroot .. "appnet/" .. pkgname .. ".fpkg.lua"
         if fs.getInfo(path) then
             fs.remove(path)
             utils.printt(state, "Removed: " .. pkgname)
@@ -155,7 +155,7 @@ function apm.exec(args, state)
         utils.printt(state, "Rescanning packages...")
         local pkgs = fs.getDirectoryItems(state.fsroot .. "appnet")
         for _, file in ipairs(pkgs) do
-            if file:match("%.lpkg%.lua$") then
+            if file:match("%.fpkg%.lua$") then
                 local path = state.fsroot .. "appnet/" .. file
                 local fullpath = love.filesystem.getSaveDirectory() .. "/" .. path
                 local valid, meta = validate_package(fullpath)
@@ -173,7 +173,7 @@ function apm.exec(args, state)
             utils.printt(state, "Usage: apm info <name>")
             return
         end
-        local path = state.fsroot .. "appnet/" .. pkgname .. ".lpkg.lua"
+        local path = state.fsroot .. "appnet/" .. pkgname .. ".fpkg.lua"
         local valid, meta = validate_package(love.filesystem.getSaveDirectory() .. "/" .. path)
         if valid then
             utils.printt(state, "Name: " .. meta.name)
