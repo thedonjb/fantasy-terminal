@@ -58,7 +58,7 @@ function love.load()
     end
     terminal.processcommand("apm rescan")
 
-    local rc_path = state.home .. ".ltrc"
+    local rc_path = state.home .. ".ftrc"
     if love.filesystem.getInfo(rc_path) then
         local ok, err = pcall(function()
             local f = love.filesystem.newFile(rc_path)
@@ -77,7 +77,7 @@ function love.load()
         end)
 
         if not ok then
-            table.insert(state.term, { prompt = "", text = "⚠ Failed to execute ~/.ltrc: " .. tostring(err) })
+            table.insert(state.term, { prompt = "", text = "⚠ Failed to execute ~/.ftrc: " .. tostring(err) })
         end
     end
 end

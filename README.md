@@ -83,7 +83,7 @@ love .
 ## Package Manager (APM)
 
 fantasy-terminal includes **APM** (App Package Manager) out of the box.
-It automatically rescans installed packages on startup and also supports an `~/.ltrc` file for custom startup commands.
+It automatically rescans installed packages on startup and also supports an `~/.ftrc` file for custom startup commands.
 
 ### Installing packages
 
@@ -126,9 +126,9 @@ apm rescan
 
 ---
 
-## `.ltrc` Startup File
+## `.ftrc` Startup File
 
-You can create a file at `ftermfs/home/.ltrc` to auto-run commands at startup, e.g.:
+You can create a file at `ftermfs/home/.ftrc` to auto-run commands at startup, e.g.:
 
 ```
 apm rescan
