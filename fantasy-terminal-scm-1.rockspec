@@ -21,7 +21,6 @@ dependencies = {
 build = {
    type = "builtin",
    modules = {
-      ["src.utils"] = "src/utils.lua",
-      ["src.modules.appnet"] = "src/modules/appnet.lua"
+      ["src.utils"] = "src/utils.lua"
    }
 }
